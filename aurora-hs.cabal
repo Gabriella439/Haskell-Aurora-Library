@@ -1,0 +1,26 @@
+Name: aurora
+Version: 1.0.0
+Cabal-Version: >=1.8.0.2
+Build-Type: Simple
+License: BSD3
+License-File: LICENSE
+Copyright: 2014 Gabriel Gonzalez
+Author: Gabriel Gonzalez
+Maintainer: Gabriel439@gmail.com
+Bug-Reports: https://github.com/Gabriel439/Haskell-Aurora-Library/issues
+Synopsis: Aurora utilities
+Description: This library currently provides utilities for templating Aurora
+  configuration files in a type-safe way.  This library may provide other
+  Aurora-related functionality in the future.
+Category: System
+Source-Repository head
+    Type: git
+    Location: https://github.com/Gabriel439/Haskell-Aurora-Library
+
+Library
+    Hs-Source-Dirs: src
+    Build-Depends:
+        base           >= 4       && < 5  ,
+        containers                   < 0.6
+    Exposed-Modules: Aurora
+    GHC-Options: -O2 -Wall
