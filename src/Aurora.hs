@@ -1,42 +1,9 @@
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
 
 module Aurora (
-    -- * Process
-      Process(..)
-    , _Process
-    , processName
-    , cmdline
-    , processPermissibleFailures
-    , daemon
-    , ephemeral
-    , minDuration
-    , final
-
-    -- * Constraint
-    , Constraint(..)
-    , order
-    , order'
-
-    -- * Resource
-    , Resource(..)
-    , cpu
-    , ram
-    , disk
-
-    -- * Task
-    , Task(..)
-    , _Task
-    , taskName
-    , process
-    , processes
-    , taskConstraints
-    , resources
-    , taskPermissibleFailures
-    , maxConcurrency
-    , finalizationWait
-
     -- * Job
-    , Job(..)
+      Job(..)
+    , _Job
     , task
     , jobName
     , role
@@ -51,6 +18,40 @@ module Aurora (
     , priority
     , production
     , healthCheckConfig
+
+    -- ** Task
+    , Task(..)
+    , _Task
+    , taskName
+    , process
+    , processes
+    , taskConstraints
+    , resources
+    , taskPermissibleFailures
+    , maxConcurrency
+    , finalizationWait
+
+    -- *** Process
+    , Process(..)
+    , _Process
+    , processName
+    , cmdline
+    , processPermissibleFailures
+    , daemon
+    , ephemeral
+    , minDuration
+    , final
+
+    -- *** Constraint
+    , Constraint(..)
+    , order
+    , order'
+
+    -- *** Resource
+    , Resource(..)
+    , cpu
+    , ram
+    , disk
 
     -- ** JobType
     , JobType(..)
@@ -119,7 +120,12 @@ module Aurora (
     , totalPermissibleFailures
 
     -- ** HealthCheckConfig
-    , HealthCheckConfig
+    , HealthCheckConfig(..)
+    , _HealthCheckConfig
+    , initialIntervalSecs
+    , intervalSecs
+    , timeoutSecs
+    , consecutivePermissibleFailures
 
     -- * Maximum
     , Maximum(..)
@@ -159,6 +165,23 @@ data Process = Process
     -- ^ When `True`, this process is a finalizing one that should run last
     } deriving (Eq, Show)
 
+renderProcess :: Process -> [String]
+renderProcess p =
+        ["Process("]
+    ++  indent
+        [ "name         = " ++ show (_processName                p) ++ ", "
+        , "cmdline      = " ++ show (_cmdline                    p) ++ ", "
+        , "max_failures = " ++ show  maxFailures                    ++ ", "
+        , "daemon       = " ++ show (_daemon                     p) ++ ", "
+        , "ephemeral    = " ++ show (_ephemeral                  p) ++ ", "
+        , "min_duration = " ++ show (_minDuration                p) ++ ", "
+        , "final        = " ++ show (_final                      p) ++ ")"
+        ]
+  where
+    maxFailures = case _processPermissibleFailures p of
+        Unlimited -> 0
+        Finite n  -> n
+
 {-| Default `Process`
 
     Required fields: `processName` and `cmdline`
@@ -170,7 +193,6 @@ data Process = Process
 >     , _minDuration                = 15
 >     , _final                      = False
 >     }
-
 -}
 _Process :: Process
 _Process = Process
@@ -544,6 +566,7 @@ finalizationWait :: Functor f => (Word -> f Word) -> (Task -> f Task)
 finalizationWait k x =
     fmap (\y -> x { _finalizationWait = y }) (k (_finalizationWait x))
 
+-- | Options for an aurora job
 data Job = Job
     { _task                   :: Task
     -- ^ The Task object to bind to this job
@@ -1184,10 +1207,62 @@ totalPermissibleFailures k x =
     fmap (\y -> x { _totalPermissibleFailures = y })
          (k (_totalPermissibleFailures x))
 
-data HealthCheckConfig = HealthCheckConfig deriving (Eq, Show)
+-- | Parameters for controlling a task’s health checks via HTTP.
+data HealthCheckConfig = HealthCheckConfig
+    { _initialIntervalSecs            :: Word
+    -- ^ Initial delay for performing an HTTP health check
+    , _intervalSecs                   :: Word
+    -- ^ Interval on which to check the task’s health via HTTP
+    , _timeoutSecs                    :: Word
+    -- ^ HTTP request timeout
+    , _consecutivePermissibleFailures :: Word
+    -- ^ Consecutive failures tolerated before considering a task unhealthy
+    } deriving (Eq, Show)
 
+{-| Default `HealthCheckConfig`
+-}
 _HealthCheckConfig :: HealthCheckConfig
 _HealthCheckConfig = HealthCheckConfig
+    { _initialIntervalSecs            = 15
+    , _intervalSecs                   = 10
+    , _timeoutSecs                    = 1
+    , _consecutivePermissibleFailures = 0
+    }
+
+{-|
+> initialIntervalSecs :: Lens' HealthCheckConfig Word
+-}
+initialIntervalSecs
+    :: Functor f
+    => (Word -> f Word) -> (HealthCheckConfig -> f HealthCheckConfig)
+initialIntervalSecs k x =
+    fmap (\y -> x { _initialIntervalSecs = y }) (k (_initialIntervalSecs x))
+
+{-|
+> intervalSecs :: Lens' HealthCheckConfig Word
+-}
+intervalSecs
+    :: Functor f
+    => (Word -> f Word) -> (HealthCheckConfig -> f HealthCheckConfig)
+intervalSecs k x = fmap (\y -> x { _intervalSecs = y }) (k (_intervalSecs x))
+
+{-|
+> timeoutSecs :: Lens' HealthCheckConfig Word
+-}
+timeoutSecs
+    :: Functor f
+    => (Word -> f Word) -> (HealthCheckConfig -> f HealthCheckConfig)
+timeoutSecs k x = fmap (\y -> x { _timeoutSecs = y }) (k (_timeoutSecs x))
+
+{-|
+> consecutivePermissibleFailures :: Lens' HealthCheckConfig Word
+-}
+consecutivePermissibleFailures
+    :: Functor f
+    => (Word -> f Word) -> (HealthCheckConfig -> f HealthCheckConfig)
+consecutivePermissibleFailures k x =
+    fmap (\y -> x { _consecutivePermissibleFailures = y })
+         (k (_consecutivePermissibleFailures x))
 
 {-| A potentially unlimited value
 
@@ -1241,3 +1316,6 @@ _Finite :: Applicative f => (a -> f a) -> (Maximum a -> f (Maximum a))
 _Finite k x = case x of
     Finite a -> fmap Finite (k a)
     _        -> pure x
+
+indent :: [String] -> [String]
+indent = map ("    " ++)
