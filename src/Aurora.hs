@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-missing-methods #-}
+
 module Aurora (
     -- * Process
       Process(..)
@@ -109,6 +111,12 @@ module Aurora (
 
     -- ** UpdateConfig
     , UpdateConfig(..)
+    , _UpdateConfig
+    , batchSize
+    , restartThreshold
+    , watchSecs
+    , perShardPermissibleFailures
+    , totalPermissibleFailures
 
     -- ** HealthCheckConfig
     , HealthCheckConfig
@@ -126,6 +134,7 @@ module Aurora (
 -- TODO: Create defaults for all records
 -- TODO: Document default values in haddocks
 -- TODO: Document fields
+-- TODO: Document the `NegativeLiterals` trick
 
 import Control.Applicative (Applicative(pure, (<*>)), liftA2)
 import Data.Map (Map)
@@ -1099,20 +1108,81 @@ _Prod k x = case x of
     _    -> pure x
 
 -- | Parameters for controlling the rate and policy of rolling updates
-data UpdateConfig = UpdateConfig deriving (Eq, Show)
-{-
+data UpdateConfig = UpdateConfig
     { _batchSize                    :: Word
+    -- ^ Maximum number of shards to be updated in one iteration
     , _restartThreshold             :: Word
+    -- ^ Maximum number of seconds before a shard must move into the `RUNNING`
+    --   state before considered a failure 
     , _watchSecs                    :: Word
-    , _perShardPermissibleFailures  :: 
-    , _totalPermissibleFailures
+    -- ^ Minimum number of seconds a shard must remain in `RUNNING` state before
+    --   considered a success 
+    , _perShardPermissibleFailures  :: Word
+    -- ^ Maximum number of permissible failures during update. Increments total
+    --   failure count when this limit is exceeded
+    , _totalPermissibleFailures     :: Word
+    -- ^ Maximum number of shard failures to be tolerated in total during an
+    --   update. Cannot be greater than or equal to the total number of tasks
+    --   in a job
     } deriving (Eq, Show)
--}
 
 {-| Default `UpdateConfig`
+
+> _UpdateConfig :: UpdateConfig
+> _UpdateConfig = UpdateConfig
+>     { _batchSize                   = 1
+>     , _restartThreshold            = 60
+>     , _watchSecs                   = 45
+>     , _perShardPermissibleFailures = 0
+>     , _totalPermissibleFailures    = 0
+>     }
 -}
 _UpdateConfig :: UpdateConfig
 _UpdateConfig = UpdateConfig
+    { _batchSize                   = 1
+    , _restartThreshold            = 60
+    , _watchSecs                   = 45
+    , _perShardPermissibleFailures = 0
+    , _totalPermissibleFailures    = 0
+    }
+
+{-|
+> batchSize :: Lens' UpdateConfig Word
+-}
+batchSize :: Functor f => (Word -> f Word) -> (UpdateConfig -> f UpdateConfig)
+batchSize k x = fmap (\y -> x { _batchSize = y }) (k (_batchSize x))
+
+{-|
+> restartThreshold :: Lens' UpdateConfig Word
+-}
+restartThreshold
+    :: Functor f => (Word -> f Word) -> (UpdateConfig -> f UpdateConfig)
+restartThreshold k x =
+    fmap (\y -> x { _restartThreshold = y }) (k (_restartThreshold x))
+
+{-|
+> watchSecs :: Lens' UpdateConfig Word
+-}
+watchSecs :: Functor f => (Word -> f Word) -> (UpdateConfig -> f UpdateConfig)
+watchSecs k x = fmap (\y -> x { _watchSecs = y }) (k (_watchSecs x))
+
+{-|
+> perShardPermissibleFailures :: Lens' UpdateConfig Word
+-}
+perShardPermissibleFailures
+    :: Functor f => (Word -> f Word) -> (UpdateConfig -> f UpdateConfig)
+perShardPermissibleFailures k x =
+    fmap (\y -> x { _perShardPermissibleFailures = y })
+         (k (_perShardPermissibleFailures x))
+
+{-|
+> totalPermissibleFailures :: Lens' UpdateConfig Word
+-}
+totalPermissibleFailures
+    :: Functor f => (Word -> f Word) -> (UpdateConfig -> f UpdateConfig)
+totalPermissibleFailures k x =
+    fmap (\y -> x { _totalPermissibleFailures = y })
+         (k (_totalPermissibleFailures x))
 
 data HealthCheckConfig = HealthCheckConfig deriving (Eq, Show)
 
