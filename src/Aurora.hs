@@ -52,24 +52,60 @@ module Aurora (
 
     -- ** JobType
     , JobType(..)
+    , _Ordinary
+    , _Service
+    , _Cron
 
     -- *** CollisionPolicy
     , CollisionPolicy(..)
+    , _KillExisting
+    , _CancelNew
 
     -- *** Cron
-    , CronSchedule(..)
-
-    -- **** Schedule
     , Schedule(..)
+    , minutes
+    , hours
+    , days
+    , months
+    , weekdays
+
+    -- **** Period
+    , Period(..)
+    , _All
+    , _Every
+    , _At
 
     -- **** Weekday
     , Weekday(..)
+    , _Sunday
+    , _Monday
+    , _Tuesday
+    , _Wednesday
+    , _Thursday
+    , _Friday
+    , _Saturday
 
     -- **** Month
     , Month(..)
+    , _January
+    , _February
+    , _March
+    , _April
+    , _May
+    , _June
+    , _July
+    , _August
+    , _September
+    , _October
+    , _November
+    , _December
 
     -- ** Environment
     , Environment(..)
+    , _Devel
+    , _Test
+    , _Staging
+    , _Prod
 
     -- ** UpdateConfig
     , UpdateConfig(..)
@@ -79,13 +115,21 @@ module Aurora (
 
     -- * Maximum
     , Maximum(..)
+    , _Unlimited
+    , _Finite
 
     -- * Re-exports
     , Word
     ) where
 
+-- TODO: Create lenses and traversals for all types
+-- TODO: Create defaults for all records
+-- TODO: Document default values in haddocks
+-- TODO: Document fields
+
 import Control.Applicative (Applicative(pure, (<*>)), liftA2)
 import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Word (Word, Word8)
 
 -- | Options for a Thermos process
@@ -528,6 +572,37 @@ data Job = Job
     --   if a health port was assigned with a command line wildcard
     } deriving (Eq, Show)
 
+{-| Default `Job`
+
+    Required fields: `task`, `role`, `cluster`, and `contact`
+
+> _Job = Job
+>     { _jobName                = Nothing
+>     , _environment            = Devel
+>     , _instances              = 1
+>     , _updateConfig           = _UpdateConfig
+>     , _jobConstraints         = Map.empty
+>     , _jobType                = Ordinary
+>     , _jobPermissibleFailures = 0
+>     , _priority               = 0 
+>     , _production             = False
+>     , _healthCheckConfig      = _HealthCheckConfig
+>     }
+-}
+_Job :: Job
+_Job = Job
+    { _jobName                = Nothing
+    , _environment            = Devel
+    , _instances              = 1
+    , _updateConfig           = _UpdateConfig
+    , _jobConstraints         = Map.empty
+    , _jobType                = Ordinary
+    , _jobPermissibleFailures = 0
+    , _priority               = 0 
+    , _production             = False
+    , _healthCheckConfig      = _HealthCheckConfig
+    }
+
 {-|
 > task :: Lens' Job Task
 -}
@@ -620,13 +695,47 @@ healthCheckConfig
 healthCheckConfig k x =
     fmap (\y -> x { _healthCheckConfig = y }) (k (_healthCheckConfig x))
 
--- | Specify whether the job is a service or cron job
+{-| Specify whether the job is a service or cron job
+
+    Services are differentiated from non-service Jobs in that tasks always
+    restart on completion, whether successful or unsuccessful. Jobs that are not
+    services may only retry `taskPermissibleFailures` times.
+-}
 data JobType
-    = Service
+    = Ordinary
+    -- ^ Default job type
+    | Service
     -- ^ Long-running service
-    | Cron CronSchedule CollisionPolicy
+    | Cron Schedule CollisionPolicy
     -- ^ Periodic command
     deriving (Eq, Show)
+
+{-|
+> _Ordinary :: Traversal' JobType ()
+-}
+_Ordinary :: Applicative f => (() -> f ()) -> (JobType -> f JobType)
+_Ordinary k x = case x of
+    Ordinary -> fmap (\() -> Ordinary) (k ())
+    _       -> pure x
+
+{-|
+> _Service :: Traversal' JobType ()
+-}
+_Service :: Applicative f => (() -> f ()) -> (JobType -> f JobType)
+_Service k x = case x of
+    Service -> fmap (\() -> Service) (k ())
+    _       -> pure x
+
+{-|
+> _Cron :: Traversal' JobType (Schedule, CollisionPolicy)
+-}
+_Cron
+    :: Applicative f
+    => ((Schedule, CollisionPolicy) -> f (Schedule, CollisionPolicy))
+    -> JobType -> f JobType
+_Cron k x = case x of
+    Cron a b -> fmap (\(a', b') -> Cron a' b') (k (a, b))
+    _        -> pure x
 
 -- | How to handle existing cron jobs
 data CollisionPolicy
@@ -636,6 +745,24 @@ data CollisionPolicy
     -- ^ Let any existing jobs finish
     deriving (Eq, Show)
 
+{-|
+> _KillExisting :: Traversal' CollisionPolicy ()
+-}
+_KillExisting
+    :: Applicative f => (() -> f ()) -> (CollisionPolicy -> f CollisionPolicy)
+_KillExisting k x = case x of
+    KillExisting -> fmap (\() -> KillExisting) (k ())
+    _            -> pure x
+
+{-|
+> _CancelNew :: Traversal' CollisionPolicy ()
+-}
+_CancelNew
+    :: Applicative f => (() -> f ()) -> (CollisionPolicy -> f CollisionPolicy)
+_CancelNew k x = case x of
+    CancelNew -> fmap (\() -> CancelNew) (k ())
+    _         -> pure x
+
 {-| A `Cron` schedule
 
     Some example translations
@@ -644,16 +771,75 @@ data CollisionPolicy
 > Schedule 59 23 31 December Friday            -- 59 23 31 12 5
 > Schedule All All All (At [January..May]) All -- * * * 1-5 *
 -}
-data CronSchedule = Schedule
-    { _minutes  :: Schedule Word8
-    , _hours    :: Schedule Word8
-    , _days     :: Schedule Word8
-    , _months   :: Schedule Month
-    , _weekdays :: Schedule Weekday
+data Schedule = Schedule
+    { _minutes  :: Period Word8
+    , _hours    :: Period Word8
+    , _days     :: Period Word8
+    , _months   :: Period Month
+    , _weekdays :: Period Weekday
     } deriving (Eq, Show)
 
--- | One field of a `CronSchedule`
-data Schedule n
+{-| Default `Schedule`
+
+_Schedule = Schedule
+    { _minutes  = All
+    , _hours    = All
+    , _days     = All
+    , _months   = All
+    , _weekdays = All
+    }
+-}
+_Schedule :: Schedule
+_Schedule = Schedule
+    { _minutes  = All
+    , _hours    = All
+    , _days     = All
+    , _months   = All
+    , _weekdays = All
+    }
+
+{-|
+> minutes :: Lens' Schedule (Period Word8)
+-}
+minutes
+    :: Functor f
+    => (Period Word8 -> f (Period Word8)) -> (Schedule -> f Schedule)
+minutes k x = fmap (\y -> x { _minutes = y }) (k (_minutes x))
+
+{-|
+> hours :: Lens' Schedule (Period Word8)
+-}
+hours
+    :: Functor f
+    => (Period Word8 -> f (Period Word8)) -> (Schedule -> f Schedule)
+hours k x = fmap (\y -> x { _hours = y }) (k (_hours x))
+
+{-|
+> days :: Lens' Schedule (Period Word8)
+-}
+days
+    :: Functor f
+    => (Period Word8 -> f (Period Word8)) -> (Schedule -> f Schedule)
+days k x = fmap (\y -> x { _days = y }) (k (_days x))
+
+{-|
+> months :: Lens' Schedule (Period Month)
+-}
+months
+    :: Functor f
+    => (Period Month -> f (Period Month)) -> (Schedule -> f Schedule)
+months k x = fmap (\y -> x { _months = y }) (k (_months x))
+
+{-|
+> weekdays :: Lens' Schedule (Period Weekday)
+-}
+weekdays
+    :: Functor f
+    => (Period Weekday -> f (Period Weekday)) -> (Schedule -> f Schedule)
+weekdays k x = fmap (\y -> x { _weekdays = y }) (k (_weekdays x))
+
+-- | One field of a `Schedule`
+data Period n
     = All
     -- ^ @*@
     | Every n
@@ -662,8 +848,32 @@ data Schedule n
     -- ^ @n1,n2,n3@
     deriving (Eq, Show)
 
-instance Num n => Num (Schedule n) where
+instance Num n => Num (Period n) where
     fromInteger n = At [fromInteger n]
+
+{-|
+> _All :: Traversal' (Period n) ()
+-}
+_All :: Applicative f => (() -> f ()) -> (Period n -> f (Period n))
+_All k x = case x of
+    All -> fmap (\() -> All) (k ())
+    _   -> pure x
+
+{-|
+> _Every :: Traversal' (Period n) n
+-}
+_Every :: Applicative f => (n -> f n) -> (Period n -> f (Period n))
+_Every k x = case x of
+    Every n -> fmap Every (k n)
+    _       -> pure x
+
+{-|
+> _At :: Traversal' (Period n) [n]
+-}
+_At :: Applicative f => ([n] -> f [n]) -> (Period n -> f (Period n))
+_At k x = case x of
+    At n -> fmap At (k n)
+    _    -> pure x
 
 -- | Day of the week
 data Weekday
@@ -675,6 +885,62 @@ data Weekday
     | Friday
     | Saturday
     deriving (Eq, Ord, Show, Enum, Bounded)
+
+{-|
+> _Sunday :: Traversal' Weekday ()
+-}
+_Sunday :: Applicative f => (() -> f ()) -> (Weekday -> f Weekday)
+_Sunday k x = case x of
+    Sunday -> fmap (\() -> Sunday) (k ())
+    _      -> pure x
+
+{-|
+> _Monday :: Traversal' Weekday ()
+-}
+_Monday :: Applicative f => (() -> f ()) -> (Weekday -> f Weekday)
+_Monday k x = case x of
+    Monday -> fmap (\() -> Monday) (k ())
+    _      -> pure x
+
+{-|
+> _Tuesday :: Traversal' Weekday ()
+-}
+_Tuesday :: Applicative f => (() -> f ()) -> (Weekday -> f Weekday)
+_Tuesday k x = case x of
+    Tuesday -> fmap (\() -> Tuesday) (k ())
+    _       -> pure x
+
+{-|
+> _Wednesday :: Traversal' Weekday ()
+-}
+_Wednesday :: Applicative f => (() -> f ()) -> (Weekday -> f Weekday)
+_Wednesday k x = case x of
+    Wednesday -> fmap (\() -> Wednesday) (k ())
+    _         -> pure x
+
+{-|
+> _Thursday :: Traversal' Weekday ()
+-}
+_Thursday :: Applicative f => (() -> f ()) -> (Weekday -> f Weekday)
+_Thursday k x = case x of
+    Thursday -> fmap (\() -> Thursday) (k ())
+    _      -> pure x
+
+{-|
+> _Friday :: Traversal' Weekday ()
+-}
+_Friday :: Applicative f => (() -> f ()) -> (Weekday -> f Weekday)
+_Friday k x = case x of
+    Friday -> fmap (\() -> Friday) (k ())
+    _      -> pure x
+
+{-|
+> _Saturday :: Traversal' Weekday ()
+-}
+_Saturday :: Applicative f => (() -> f ()) -> (Weekday -> f Weekday)
+_Saturday k x = case x of
+    Saturday -> fmap (\() -> Saturday) (k ())
+    _        -> pure x
 
 -- | Month of the year
 data Month
@@ -692,6 +958,102 @@ data Month
     | December
     deriving (Eq, Ord, Show, Enum, Bounded)
 
+{-|
+> _January :: Traversal' Month ()
+-}
+_January :: Applicative f => (() -> f ()) -> (Month -> f Month)
+_January k x = case x of
+    January -> fmap (\() -> January) (k ())
+    _       -> pure x
+
+{-|
+> _February :: Traversal' Month ()
+-}
+_February :: Applicative f => (() -> f ()) -> (Month -> f Month)
+_February k x = case x of
+    February -> fmap (\() -> February) (k ())
+    _        -> pure x
+
+{-|
+> _March :: Traversal' Month ()
+-}
+_March :: Applicative f => (() -> f ()) -> (Month -> f Month)
+_March k x = case x of
+    March -> fmap (\() -> March) (k ())
+    _     -> pure x
+
+{-|
+> _April :: Traversal' Month ()
+-}
+_April :: Applicative f => (() -> f ()) -> (Month -> f Month)
+_April k x = case x of
+    April -> fmap (\() -> April) (k ())
+    _     -> pure x
+
+{-|
+> _May :: Traversal' Month ()
+-}
+_May :: Applicative f => (() -> f ()) -> (Month -> f Month)
+_May k x = case x of
+    May -> fmap (\() -> May) (k ())
+    _   -> pure x
+
+{-|
+> _June :: Traversal' Month ()
+-}
+_June :: Applicative f => (() -> f ()) -> (Month -> f Month)
+_June k x = case x of
+    June -> fmap (\() -> June) (k ())
+    _    -> pure x
+
+{-|
+> _July :: Traversal' Month ()
+-}
+_July :: Applicative f => (() -> f ()) -> (Month -> f Month)
+_July k x = case x of
+    July -> fmap (\() -> July) (k ())
+    _    -> pure x
+
+{-|
+> _August :: Traversal' Month ()
+-}
+_August :: Applicative f => (() -> f ()) -> (Month -> f Month)
+_August k x = case x of
+    August -> fmap (\() -> August) (k ())
+    _      -> pure x
+
+{-|
+> _September :: Traversal' Month ()
+-}
+_September :: Applicative f => (() -> f ()) -> (Month -> f Month)
+_September k x = case x of
+    September -> fmap (\() -> September) (k ())
+    _         -> pure x
+
+{-|
+> _October :: Traversal' Month ()
+-}
+_October :: Applicative f => (() -> f ()) -> (Month -> f Month)
+_October k x = case x of
+    October -> fmap (\() -> October) (k ())
+    _       -> pure x
+
+{-|
+> _November :: Traversal' Month ()
+-}
+_November :: Applicative f => (() -> f ()) -> (Month -> f Month)
+_November k x = case x of
+    November -> fmap (\() -> November) (k ())
+    _       -> pure x
+
+{-|
+> _December :: Traversal' Month ()
+-}
+_December :: Applicative f => (() -> f ()) -> (Month -> f Month)
+_December k x = case x of
+    December -> fmap (\() -> December) (k ())
+    _       -> pure x
+
 -- | Aurora environment to deploy to
 data Environment
     = Devel
@@ -704,9 +1066,58 @@ data Environment
     -- ^ Production
     deriving (Eq, Show)
 
+{-|
+> _Devel :: Traversal' Environment ()
+-}
+_Devel :: Applicative f => (() -> f ()) -> (Environment -> f Environment)
+_Devel k x = case x of
+    Devel -> fmap (\() -> Devel) (k ())
+    _     -> pure x
+
+{-|
+> _Test :: Traversal' Environment ()
+-}
+_Test :: Applicative f => (() -> f ()) -> (Environment -> f Environment)
+_Test k x = case x of
+    Test -> fmap (\() -> Test) (k ())
+    _    -> pure x
+
+{-|
+> _Staging :: Traversal' Environment Int
+-}
+_Staging :: Applicative f => (Int -> f Int) -> (Environment -> f Environment)
+_Staging k x = case x of
+    Staging n -> fmap Staging (k n)
+    _         -> pure x
+
+{-|
+> _Prod :: Traversal' Environment ()
+-}
+_Prod :: Applicative f => (() -> f ()) -> (Environment -> f Environment)
+_Prod k x = case x of
+    Prod -> fmap (\() -> Prod) (k ())
+    _    -> pure x
+
+-- | Parameters for controlling the rate and policy of rolling updates
 data UpdateConfig = UpdateConfig deriving (Eq, Show)
+{-
+    { _batchSize                    :: Word
+    , _restartThreshold             :: Word
+    , _watchSecs                    :: Word
+    , _perShardPermissibleFailures  :: 
+    , _totalPermissibleFailures
+    } deriving (Eq, Show)
+-}
+
+{-| Default `UpdateConfig`
+-}
+_UpdateConfig :: UpdateConfig
+_UpdateConfig = UpdateConfig
 
 data HealthCheckConfig = HealthCheckConfig deriving (Eq, Show)
+
+_HealthCheckConfig :: HealthCheckConfig
+_HealthCheckConfig = HealthCheckConfig
 
 {-| A potentially unlimited value
 
@@ -744,3 +1155,19 @@ instance Num a => Num (Maximum a) where
     signum = fmap signum
 
     abs    = fmap abs
+
+{-|
+> _Unlimited :: Traversal' (Maximum a) ()
+-}
+_Unlimited :: Applicative f => (() -> f ()) -> (Maximum a -> f (Maximum a))
+_Unlimited k x = case x of
+    Unlimited -> fmap (\() -> Unlimited) (k ())
+    _         -> pure x
+
+{-|
+> _Finite :: Traversal' (Maximum a) a
+-}
+_Finite :: Applicative f => (a -> f a) -> (Maximum a -> f (Maximum a))
+_Finite k x = case x of
+    Finite a -> fmap Finite (k a)
+    _        -> pure x
