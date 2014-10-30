@@ -4,6 +4,7 @@ module Aurora (
     -- * Job
       Job(..)
     , _Job
+    , jobDoc
     , task
     , jobName
     , role
@@ -22,6 +23,7 @@ module Aurora (
     -- ** Task
     , Task(..)
     , _Task
+    , taskDoc
     , taskName
     , process
     , processes
@@ -34,6 +36,7 @@ module Aurora (
     -- *** Process
     , Process(..)
     , _Process
+    , processDoc
     , processName
     , cmdline
     , processPermissibleFailures
@@ -44,11 +47,15 @@ module Aurora (
 
     -- *** Constraint
     , Constraint(..)
+    , _Constraint
+    , constraintDoc
     , order
     , order'
 
     -- *** Resource
     , Resource(..)
+    , _Resource
+    , resourceDoc
     , cpu
     , ram
     , disk
@@ -61,11 +68,14 @@ module Aurora (
 
     -- *** CollisionPolicy
     , CollisionPolicy(..)
+    , collisionPolicyDoc
     , _KillExisting
     , _CancelNew
 
     -- *** Cron
     , Schedule(..)
+    , _Schedule
+    , scheduleDoc
     , minutes
     , hours
     , days
@@ -77,6 +87,7 @@ module Aurora (
     , _All
     , _Every
     , _At
+    , _Range
 
     -- **** Weekday
     , Weekday(..)
@@ -105,6 +116,7 @@ module Aurora (
 
     -- ** Environment
     , Environment(..)
+    , environmentDoc
     , _Devel
     , _Test
     , _Staging
@@ -113,6 +125,7 @@ module Aurora (
     -- ** UpdateConfig
     , UpdateConfig(..)
     , _UpdateConfig
+    , updateConfigDoc
     , batchSize
     , restartThreshold
     , watchSecs
@@ -122,6 +135,7 @@ module Aurora (
     -- ** HealthCheckConfig
     , HealthCheckConfig(..)
     , _HealthCheckConfig
+    , healthCheckConfigDoc
     , initialIntervalSecs
     , intervalSecs
     , timeoutSecs
@@ -141,11 +155,16 @@ module Aurora (
 -- TODO: Document default values in haddocks
 -- TODO: Document fields
 -- TODO: Document the `NegativeLiterals` trick
+-- TODO: Check that documentation examples compile
+-- TODO: More type-safe units (i.e. bytes, seconds)
+-- TODO: Pretty-printer should omit fields that match defaults
 
-import Control.Applicative (Applicative(pure, (<*>)), liftA2)
+import Control.Applicative (Applicative(pure, (<*>)), liftA2, (<|>))
+import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Word (Word, Word8)
+import Text.PrettyPrint.Leijen
 
 -- | Options for a Thermos process
 data Process = Process
@@ -165,22 +184,28 @@ data Process = Process
     -- ^ When `True`, this process is a finalizing one that should run last
     } deriving (Eq, Show)
 
-renderProcess :: Process -> [String]
-renderProcess p =
-        ["Process("]
-    ++  indent
-        [ "name         = " ++ show (_processName                p) ++ ", "
-        , "cmdline      = " ++ show (_cmdline                    p) ++ ", "
-        , "max_failures = " ++ show  maxFailures                    ++ ", "
-        , "daemon       = " ++ show (_daemon                     p) ++ ", "
-        , "ephemeral    = " ++ show (_ephemeral                  p) ++ ", "
-        , "min_duration = " ++ show (_minDuration                p) ++ ", "
-        , "final        = " ++ show (_final                      p) ++ ")"
-        ]
+-- | Pretty print a `Process`
+processDoc :: Process -> Doc
+processDoc p = recordDoc
+    "Process"
+    [ ("name"        , name'       )
+    , ("cmdline"     , cmdline'    )
+    , ("max_failures", maxFailures')
+    , ("daemon"      , daemon'     )
+    , ("ephemeral"   , ephemeral'  )
+    , ("min_duration", minDuration')
+    , ("final"       , final'      )
+    ]
   where
-    maxFailures = case _processPermissibleFailures p of
+    name'        = qString (_processName p)
+    cmdline'     = qString (_cmdline     p)
+    maxFailures' = word (case _processPermissibleFailures p of
         Unlimited -> 0
-        Finite n  -> n
+        Finite n  -> n + 1 )
+    daemon'      = bool    (_daemon      p)
+    ephemeral'   = bool    (_daemon      p)
+    minDuration' = word    (_minDuration p)
+    final'       = bool    (_final       p)
 
 {-| Default `Process`
 
@@ -312,6 +337,22 @@ data Constraint = Constraint
     -- ^ List of processes by name that should be run serially
     } deriving (Eq, Show)
 
+{-| Default `Constraint`
+
+> _Constraint = Constraint { _order = [] }
+-}
+_Constraint :: Constraint
+_Constraint = Constraint { _order = [] }
+
+-- | Pretty print a `Constraint`
+constraintDoc :: Constraint -> Doc
+constraintDoc c = recordDoc
+    "Constraint"
+    [ ("order", order')
+    ]
+  where
+    order' = list' (map qString (_order c))
+
 {-|
 > order :: Lens' Constraint String
 -}
@@ -340,6 +381,28 @@ data Resource = Resource
     , _disk :: Word
     -- ^ Bytes of disk required by the task
     } deriving (Eq, Show)
+
+{-| Default `Resource`
+
+    Required fields: `cpu`, `ram`, and `disk`
+
+> _Resource = Resource {}
+-}
+_Resource :: Resource
+_Resource = Resource {}
+
+-- | Pretty print a `Resource`
+resourceDoc :: Resource -> Doc
+resourceDoc r = recordDoc
+    "Resource"
+    [ ("cpu" , cpu' )
+    , ("ram" , ram' )
+    , ("disk", disk')
+    ]
+  where
+    cpu'  = double (_cpu  r)
+    ram'  = word   (_ram  r)
+    disk' = word   (_disk r)
 
 {-|
 > cpu :: Lens' Resource Double
@@ -375,7 +438,7 @@ data Task = Task
     -- ^ List of `Constraint`s constraining processes
     , _resources               :: Resource
     -- ^ Resource footprint
-    , _taskPermissibleFailures :: Maximum Word
+    , _taskPermissibleFailures :: Word
     -- ^ Maximum permissible process failures
     , _maxConcurrency          :: Maximum Word
     -- ^ Maximum number of concurrent processes
@@ -383,6 +446,31 @@ data Task = Task
     -- ^ Amount of time allocated for finalizing processes, in seconds
     } deriving (Eq, Show)
 
+-- | Pretty print a `Task`
+taskDoc :: Task -> Doc
+taskDoc t = recordDoc
+    "Task"
+    [ ("name"             , name'            )
+    , ("processes"        , processes'       )
+    , ("constraints"      , constraints'     )
+    , ("resources"        , resources'       )
+    , ("max_failures"     , maxFailures'     )
+    , ("max_concurrency"  , maxConcurrency'  )
+    , ("finalization_wait", finalizationWait')
+    ]
+  where
+    name'             = string (case _taskName t of
+        Nothing  -> _processName (_process t)
+        Just str -> str )
+    processes'        = list' (map processDoc (_process t : _processes t))
+    constraints'      = list' (map constraintDoc (_taskConstraints t))
+    resources'        = resourceDoc (_resources t)
+    maxFailures'      = word (_taskPermissibleFailures t)
+    maxConcurrency'   = word (case _maxConcurrency t of
+        Unlimited -> 0
+        Finite n  -> n + 1 )
+    finalizationWait' = word (_finalizationWait t)
+    
 {-| Default `Task`
 
     Required fields: `taskName` and `resources`
@@ -491,8 +579,7 @@ resources k x = fmap (\y -> x { _resources = y }) (k (_resources x))
     runs, and the succeeding Process would succeed on the first run.  The task
     would succeed because the task permits 1 process marked permanently failed.
 -}
-taskPermissibleFailures
-    :: Functor f => (Maximum Word -> f (Maximum Word)) -> (Task -> f Task)
+taskPermissibleFailures :: Functor f => (Word -> f Word) -> (Task -> f Task)
 taskPermissibleFailures k x =
     fmap (\y -> x { _taskPermissibleFailures = y })
          (k (_taskPermissibleFailures x))
@@ -634,6 +721,58 @@ _Job = Job
     , _production             = False
     , _healthCheckConfig      = _HealthCheckConfig
     }
+
+-- | Pretty print a `Job`
+jobDoc :: Job -> Doc
+jobDoc j = recordDoc
+    "Job"
+    [ ("task"                 , task'               )
+    , ("name"                 , name'               )
+    , ("role"                 , role'               )
+    , ("cluster"              , cluster'            )
+    , ("environment"          , environment'        )
+    , ("contact"              , contact'            )
+    , ("instances"            , instances'          )
+    , ("cron_schedule"        , cronSchedule'       )
+    , ("cron_collision_policy", cronCollisionPolicy')
+    , ("update_config"        , updateConfig'       )
+    , ("constraints"          , constraints'        )
+    , ("service"              , service'            )
+    , ("max_task_failures"    , maxTaskFailures'    )
+    , ("priority"             , priority'           )
+    , ("production"           , production'         )
+    , ("health_check_config"  , healthCheckConfig'  )
+    ]
+  where
+    task'                = taskDoc         (_task         j)
+    name'                = qString (case _jobName j <|> _taskName (_task j) of
+        Nothing  -> _processName (_process (_task j))
+        Just str -> str )
+    role'                = qString              (_role              j)
+    cluster'             = qString              (_cluster           j)
+    environment'         = environmentDoc       (_environment       j)
+    contact'             = qString              (_contact           j)
+    instances'           = word                 (_instances         j)
+    cronSchedule'        = case _jobType j of
+        Cron s _ -> scheduleDoc s
+        _        -> text "None"
+    cronCollisionPolicy' = collisionPolicyDoc (case _jobType j of
+        Cron _ c -> c
+        _        -> KillExisting )
+    updateConfig'        = updateConfigDoc (_updateConfig j)
+    constraints'         = dict (map format (Map.assocs (_jobConstraints j)))
+      where
+        dict = encloseSep lbrace rbrace comma
+        format (key, value) = text key <+> colon <+> text value
+    service'             = bool (case _jobType j of
+        Service -> True
+        _       -> False )
+    maxTaskFailures'     = int (case _jobPermissibleFailures j of
+        Unlimited -> -1
+        Finite n  -> fromIntegral n + 1 )
+    priority'            = integer              (_priority          j)
+    production'          = bool                 (_production        j)
+    healthCheckConfig'   = healthCheckConfigDoc (_healthCheckConfig j)
 
 {-|
 > task :: Lens' Job Task
@@ -777,6 +916,12 @@ data CollisionPolicy
     -- ^ Let any existing jobs finish
     deriving (Eq, Show)
 
+-- | Pretty print a `CollisionPolicy`
+collisionPolicyDoc :: CollisionPolicy -> Doc
+collisionPolicyDoc c = text (case c of
+    KillExisting -> "KILL_EXISTING"
+    CancelNew    -> "CANCEL_NEW" )
+
 {-|
 > _KillExisting :: Traversal' CollisionPolicy ()
 -}
@@ -830,6 +975,23 @@ _Schedule = Schedule
     , _weekdays = All
     }
 
+-- | Pretty print a `Schedule`
+scheduleDoc :: Schedule -> Doc
+scheduleDoc s = minutes' <+> hours' <+> days' <+> months' <+> weekdays'
+  where
+    fieldWith :: (Schedule -> Period Word8) -> Doc
+    fieldWith accessor = case accessor s of
+        All         -> text "*"
+        Every n     -> text ("*/" ++ show n)
+        At ns       -> text (intercalate "," (map show ns))
+        Range n1 n2 -> text (show n1 ++ "-" ++ show n2)
+
+    minutes'  = fieldWith _minutes
+    hours'    = fieldWith _hours
+    days'     = fieldWith _days
+    months'   = fieldWith (fmap (fromIntegral . succ . fromEnum) . _months  )
+    weekdays' = fieldWith (fmap (fromIntegral . succ . fromEnum) . _weekdays)
+
 {-|
 > minutes :: Lens' Schedule (Period Word8)
 -}
@@ -878,10 +1040,19 @@ data Period n
     -- ^ @*/n@
     | At [n]
     -- ^ @n1,n2,n3@
+    | Range n n
+    -- ^ @n1-n2@
     deriving (Eq, Show)
 
 instance Num n => Num (Period n) where
     fromInteger n = At [fromInteger n]
+
+instance Functor Period where
+    fmap f p = case p of
+        All         -> All
+        Every n     -> Every (f n)
+        At    ns    -> At (map f ns)
+        Range n1 n2 -> Range (f n1) (f n2)
 
 {-|
 > _All :: Traversal' (Period n) ()
@@ -906,6 +1077,14 @@ _At :: Applicative f => ([n] -> f [n]) -> (Period n -> f (Period n))
 _At k x = case x of
     At n -> fmap At (k n)
     _    -> pure x
+
+{-|
+> _Range :: Traversal' (Period n) (n, n)
+-}
+_Range :: Applicative f => ((n, n) -> f (n, n)) -> (Period n -> f (Period n))
+_Range k x = case x of
+    Range n1 n2 -> fmap (\(n1', n2') -> Range n1' n2') (k (n1, n2))
+    _           -> pure x
 
 -- | Day of the week
 data Weekday
@@ -1098,6 +1277,14 @@ data Environment
     -- ^ Production
     deriving (Eq, Show)
 
+-- | Pretty print an `Environment`
+environmentDoc :: Environment -> Doc
+environmentDoc e = qString (case e of
+    Devel     -> "devel"
+    Test      -> "test"
+    Staging n -> "staging" ++ show n
+    Prod      -> "prod" )
+
 {-|
 > _Devel :: Traversal' Environment ()
 -}
@@ -1169,6 +1356,23 @@ _UpdateConfig = UpdateConfig
     , _totalPermissibleFailures    = 0
     }
 
+-- | Pretty print an `UpdateConfig`
+updateConfigDoc :: UpdateConfig -> Doc
+updateConfigDoc u = recordDoc
+    "UpdateConfig"
+    [ ("batch_size"            , batchSize'          )
+    , ("restart_threshold"     , restartThreshold'   )
+    , ("watch_secs"            , watchSecs'          )
+    , ("max_per_shard_failures", maxPerShardFailures')
+    , ("max_total_failures"    , maxTotalFailures'   )
+    ]
+  where
+    batchSize'           = word (_batchSize                   u)
+    restartThreshold'    = word (_restartThreshold            u)
+    watchSecs'           = word (_watchSecs                   u)
+    maxPerShardFailures' = word (_perShardPermissibleFailures u)
+    maxTotalFailures'    = word (_totalPermissibleFailures    u)
+
 {-|
 > batchSize :: Lens' UpdateConfig Word
 -}
@@ -1228,6 +1432,21 @@ _HealthCheckConfig = HealthCheckConfig
     , _timeoutSecs                    = 1
     , _consecutivePermissibleFailures = 0
     }
+
+-- | Pretty print a `HealthCheckConfig`
+healthCheckConfigDoc :: HealthCheckConfig -> Doc
+healthCheckConfigDoc h = recordDoc
+    "HealthCheckConfig"
+    [ ("initial_interval_secs"   , initialIntervalSecs'   )
+    , ("interval_secs"           , intervalSecs'          )
+    , ("timeout_secs"            , timeoutSecs'           )
+    , ("max_consecutive_failures", maxConsecutiveFailures')
+    ]
+  where
+    initialIntervalSecs'    = word (_initialIntervalSecs            h)
+    intervalSecs'           = word (_intervalSecs                   h)
+    timeoutSecs'            = word (_timeoutSecs                    h)
+    maxConsecutiveFailures' = word (_consecutivePermissibleFailures h)
 
 {-|
 > initialIntervalSecs :: Lens' HealthCheckConfig Word
@@ -1317,5 +1536,23 @@ _Finite k x = case x of
     Finite a -> fmap Finite (k a)
     _        -> pure x
 
-indent :: [String] -> [String]
-indent = map ("    " ++)
+recordDoc :: String -> [(String, Doc)] -> Doc
+recordDoc recordName pairs =
+        text recordName <> tupled' (map format pairs)
+  where
+    format (fieldName, value) = text fieldName <+> equals <+> value
+
+shown :: Show a => a -> Doc
+shown = text . show
+
+word :: Word -> Doc
+word = shown
+
+qString :: String -> Doc
+qString = dquotes . text
+
+list' :: [Doc] -> Doc
+list' ds = list (map (space <>) ds)
+
+tupled' :: [Doc] -> Doc
+tupled' ds = tupled (map (space <>) ds)
