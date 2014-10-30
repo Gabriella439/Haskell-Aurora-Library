@@ -4,7 +4,7 @@ module Aurora (
     -- * Job
       Job(..)
     , _Job
-    , jobDoc
+    , prettyJob
     , task
     , jobName
     , role
@@ -23,7 +23,6 @@ module Aurora (
     -- ** Task
     , Task(..)
     , _Task
-    , taskDoc
     , taskName
     , process
     , processes
@@ -36,7 +35,6 @@ module Aurora (
     -- *** Process
     , Process(..)
     , _Process
-    , processDoc
     , processName
     , cmdline
     , processPermissibleFailures
@@ -48,14 +46,12 @@ module Aurora (
     -- *** Constraint
     , Constraint(..)
     , _Constraint
-    , constraintDoc
     , order
     , order'
 
     -- *** Resource
     , Resource(..)
     , _Resource
-    , resourceDoc
     , cpu
     , ram
     , disk
@@ -68,14 +64,12 @@ module Aurora (
 
     -- *** CollisionPolicy
     , CollisionPolicy(..)
-    , collisionPolicyDoc
     , _KillExisting
     , _CancelNew
 
     -- *** Cron
     , Schedule(..)
     , _Schedule
-    , scheduleDoc
     , minutes
     , hours
     , days
@@ -116,7 +110,6 @@ module Aurora (
 
     -- ** Environment
     , Environment(..)
-    , environmentDoc
     , _Devel
     , _Test
     , _Staging
@@ -125,7 +118,6 @@ module Aurora (
     -- ** UpdateConfig
     , UpdateConfig(..)
     , _UpdateConfig
-    , updateConfigDoc
     , batchSize
     , restartThreshold
     , watchSecs
@@ -135,7 +127,6 @@ module Aurora (
     -- ** HealthCheckConfig
     , HealthCheckConfig(..)
     , _HealthCheckConfig
-    , healthCheckConfigDoc
     , initialIntervalSecs
     , intervalSecs
     , timeoutSecs
@@ -185,8 +176,8 @@ data Process = Process
     } deriving (Eq, Show)
 
 -- | Pretty print a `Process`
-processDoc :: Process -> Doc
-processDoc p = recordDoc
+prettyProcess :: Process -> Doc
+prettyProcess p = recordDoc
     "Process"
     [ ("name"        , name'       )
     , ("cmdline"     , cmdline'    )
@@ -345,8 +336,8 @@ _Constraint :: Constraint
 _Constraint = Constraint { _order = [] }
 
 -- | Pretty print a `Constraint`
-constraintDoc :: Constraint -> Doc
-constraintDoc c = recordDoc
+prettyConstraint :: Constraint -> Doc
+prettyConstraint c = recordDoc
     "Constraint"
     [ ("order", order')
     ]
@@ -392,8 +383,8 @@ _Resource :: Resource
 _Resource = Resource {}
 
 -- | Pretty print a `Resource`
-resourceDoc :: Resource -> Doc
-resourceDoc r = recordDoc
+prettyResource :: Resource -> Doc
+prettyResource r = recordDoc
     "Resource"
     [ ("cpu" , cpu' )
     , ("ram" , ram' )
@@ -447,8 +438,8 @@ data Task = Task
     } deriving (Eq, Show)
 
 -- | Pretty print a `Task`
-taskDoc :: Task -> Doc
-taskDoc t = recordDoc
+prettyTask :: Task -> Doc
+prettyTask t = recordDoc
     "Task"
     [ ("name"             , name'            )
     , ("processes"        , processes'       )
@@ -462,9 +453,9 @@ taskDoc t = recordDoc
     name'             = string (case _taskName t of
         Nothing  -> _processName (_process t)
         Just str -> str )
-    processes'        = list' (map processDoc (_process t : _processes t))
-    constraints'      = list' (map constraintDoc (_taskConstraints t))
-    resources'        = resourceDoc (_resources t)
+    processes'        = list' (map prettyProcess (_process t : _processes t))
+    constraints'      = list' (map prettyConstraint (_taskConstraints t))
+    resources'        = prettyResource (_resources t)
     maxFailures'      = word (_taskPermissibleFailures t)
     maxConcurrency'   = word (case _maxConcurrency t of
         Unlimited -> 0
@@ -723,8 +714,8 @@ _Job = Job
     }
 
 -- | Pretty print a `Job`
-jobDoc :: Job -> Doc
-jobDoc j = recordDoc
+prettyJob :: Job -> Doc
+prettyJob j = recordDoc
     "Job"
     [ ("task"                 , task'               )
     , ("name"                 , name'               )
@@ -744,22 +735,22 @@ jobDoc j = recordDoc
     , ("health_check_config"  , healthCheckConfig'  )
     ]
   where
-    task'                = taskDoc         (_task         j)
+    task'                = prettyTask           (_task         j)
     name'                = qString (case _jobName j <|> _taskName (_task j) of
         Nothing  -> _processName (_process (_task j))
         Just str -> str )
-    role'                = qString              (_role              j)
-    cluster'             = qString              (_cluster           j)
-    environment'         = environmentDoc       (_environment       j)
-    contact'             = qString              (_contact           j)
-    instances'           = word                 (_instances         j)
+    role'                = qString                 (_role              j)
+    cluster'             = qString                 (_cluster           j)
+    environment'         = prettyEnvironment       (_environment       j)
+    contact'             = qString                 (_contact           j)
+    instances'           = word                    (_instances         j)
     cronSchedule'        = case _jobType j of
-        Cron s _ -> scheduleDoc s
+        Cron s _ -> prettySchedule s
         _        -> text "None"
-    cronCollisionPolicy' = collisionPolicyDoc (case _jobType j of
+    cronCollisionPolicy' = prettyCollisionPolicy (case _jobType j of
         Cron _ c -> c
         _        -> KillExisting )
-    updateConfig'        = updateConfigDoc (_updateConfig j)
+    updateConfig'        = prettyUpdateConfig (_updateConfig j)
     constraints'         = dict (map format (Map.assocs (_jobConstraints j)))
       where
         dict = encloseSep lbrace rbrace comma
@@ -770,9 +761,9 @@ jobDoc j = recordDoc
     maxTaskFailures'     = int (case _jobPermissibleFailures j of
         Unlimited -> -1
         Finite n  -> fromIntegral n + 1 )
-    priority'            = integer              (_priority          j)
-    production'          = bool                 (_production        j)
-    healthCheckConfig'   = healthCheckConfigDoc (_healthCheckConfig j)
+    priority'            = integer                 (_priority          j)
+    production'          = bool                    (_production        j)
+    healthCheckConfig'   = prettyHealthCheckConfig (_healthCheckConfig j)
 
 {-|
 > task :: Lens' Job Task
@@ -917,8 +908,8 @@ data CollisionPolicy
     deriving (Eq, Show)
 
 -- | Pretty print a `CollisionPolicy`
-collisionPolicyDoc :: CollisionPolicy -> Doc
-collisionPolicyDoc c = text (case c of
+prettyCollisionPolicy :: CollisionPolicy -> Doc
+prettyCollisionPolicy c = text (case c of
     KillExisting -> "KILL_EXISTING"
     CancelNew    -> "CANCEL_NEW" )
 
@@ -976,8 +967,8 @@ _Schedule = Schedule
     }
 
 -- | Pretty print a `Schedule`
-scheduleDoc :: Schedule -> Doc
-scheduleDoc s = minutes' <+> hours' <+> days' <+> months' <+> weekdays'
+prettySchedule :: Schedule -> Doc
+prettySchedule s = minutes' <+> hours' <+> days' <+> months' <+> weekdays'
   where
     fieldWith :: (Schedule -> Period Word8) -> Doc
     fieldWith accessor = case accessor s of
@@ -1278,8 +1269,8 @@ data Environment
     deriving (Eq, Show)
 
 -- | Pretty print an `Environment`
-environmentDoc :: Environment -> Doc
-environmentDoc e = qString (case e of
+prettyEnvironment :: Environment -> Doc
+prettyEnvironment e = qString (case e of
     Devel     -> "devel"
     Test      -> "test"
     Staging n -> "staging" ++ show n
@@ -1357,8 +1348,8 @@ _UpdateConfig = UpdateConfig
     }
 
 -- | Pretty print an `UpdateConfig`
-updateConfigDoc :: UpdateConfig -> Doc
-updateConfigDoc u = recordDoc
+prettyUpdateConfig :: UpdateConfig -> Doc
+prettyUpdateConfig u = recordDoc
     "UpdateConfig"
     [ ("batch_size"            , batchSize'          )
     , ("restart_threshold"     , restartThreshold'   )
@@ -1434,8 +1425,8 @@ _HealthCheckConfig = HealthCheckConfig
     }
 
 -- | Pretty print a `HealthCheckConfig`
-healthCheckConfigDoc :: HealthCheckConfig -> Doc
-healthCheckConfigDoc h = recordDoc
+prettyHealthCheckConfig :: HealthCheckConfig -> Doc
+prettyHealthCheckConfig h = recordDoc
     "HealthCheckConfig"
     [ ("initial_interval_secs"   , initialIntervalSecs'   )
     , ("interval_secs"           , intervalSecs'          )
