@@ -8,10 +8,18 @@ Copyright: 2014 Gabriel Gonzalez
 Author: Gabriel Gonzalez
 Maintainer: Gabriel439@gmail.com
 Bug-Reports: https://github.com/Gabriel439/Haskell-Aurora-Library/issues
-Synopsis: Aurora utilities
-Description: This library currently provides utilities for templating Aurora
-  configuration files in a type-safe way.  This library may provide other
-  Aurora-related functionality in the future.
+Synopsis: Haskell bindings to Aurora
+Description: Apache Aurora is a service scheduler that runs on top of Mesos,
+    enabling you to run long-running services that take advantage of Mesos'
+    scalability, fault-tolerance, and resource isolation.
+    .
+    This library provides a Haskell API for Aurora with the main goals of:
+    .
+    * /Native configuration/: configure Aurora within Haskell
+    .
+    * /Static type safety/: check the aurora configuration at compile time
+    .
+    * /Stronger typing/: prevent some classes of configuration errors
 Category: System
 Source-Repository head
     Type: git
