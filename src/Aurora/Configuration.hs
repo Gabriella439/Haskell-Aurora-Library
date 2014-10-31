@@ -5,25 +5,25 @@
 module Aurora.Configuration (
     -- * Job
       Job(..)
-    , Job
+    , _Job
     , prettyJob
 
     -- ** Task
     , Task(..)
-    , Task
+    , _Task
 
     -- *** Process
     , Process(..)
-    , Process
+    , _Process
 
     -- *** Constraint
     , Constraint(..)
-    , Constraint
+    , _Constraint
     , order'
 
     -- *** Resource
     , Resource(..)
-    , Resource
+    , _Resource
 
     -- ** JobType
     , JobType(..)
@@ -33,7 +33,7 @@ module Aurora.Configuration (
 
     -- *** Cron
     , Schedule(..)
-    , Schedule
+    , _Schedule
 
     -- **** Period
     , Period(..)
@@ -49,11 +49,11 @@ module Aurora.Configuration (
 
     -- ** UpdateConfig
     , UpdateConfig(..)
-    , UpdateConfig
+    , _UpdateConfig
 
     -- ** HealthCheckConfig
     , HealthCheckConfig(..)
-    , HealthCheckConfig
+    , _HealthCheckConfig
 
     -- * Maximum
     , Maximum(..)
@@ -453,13 +453,13 @@ data Schedule = Schedule
 
 {-| Default `Schedule`
 
-_Schedule = Schedule
-    { minutes  = All
-    , hours    = All
-    , days     = All
-    , months   = All
-    , weekdays = All
-    }
+> _Schedule = Schedule
+>     { minutes  = All
+>     , hours    = All
+>     , days     = All
+>     , months   = All
+>     , weekdays = All
+>     }
 -}
 _Schedule :: Schedule
 _Schedule = Schedule
