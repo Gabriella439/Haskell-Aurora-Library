@@ -1,6 +1,8 @@
 {-# OPTIONS_GHC -fno-warn-missing-methods #-}
 
-module Aurora (
+-- | Types and documentation related to Aurora configuration
+
+module Aurora.Configuration (
     -- * Job
       Job(..)
     , _Job
