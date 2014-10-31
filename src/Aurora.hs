@@ -149,6 +149,7 @@ module Aurora (
 -- TODO: Check that documentation examples compile
 -- TODO: More type-safe units (i.e. bytes, seconds)
 -- TODO: Pretty-printer should omit fields that match defaults
+-- TODO: Tighten imports
 
 import Control.Applicative (Applicative(pure, (<*>)), liftA2, (<|>))
 import Data.List (intercalate)
@@ -937,7 +938,8 @@ _CancelNew k x = case x of
 
 > Schedule (Every 15) All All All All          -- */15 * * * *
 > Schedule 59 23 31 December Friday            -- 59 23 31 12 5
-> Schedule All All All (At [January..May]) All -- * * * 1-5 *
+> Schedule All All All (At [January,May]) All  -- * * * 1,5 *
+> Schedule All All All (Range January May) All -- * * * 1-5 *
 -}
 data Schedule = Schedule
     { _minutes  :: Period Word8
