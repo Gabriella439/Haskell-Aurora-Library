@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fno-warn-missing-methods #-}
+{-# OPTIONS_GHC -fno-warn-missing-methods -fno-warn-missing-fields #-}
 
 -- | Types and documentation related to Aurora configuration
 
@@ -162,10 +162,10 @@ _Constraint = Constraint { order = [] }
 prettyConstraint :: Constraint -> Doc
 prettyConstraint c = recordDoc
     "Constraint"
-    [ ("order", order')
+    [ ("order", order'')
     ]
   where
-    order' = list' (map qString (order c))
+    order'' = list' (map qString (order c))
 
 {-| Use the `order'` function as shorthand to generate Constraint lists. The
     following:
@@ -174,7 +174,7 @@ prettyConstraint c = recordDoc
 
     ... is shorthand for:
 
-> [Constraint { order = [process1 ^. processName, process2 ^. processName] }
+> [Constraint { order = [processName process1, processName process2] }
 -}
 order' :: Process -> Process -> [Constraint]
 order' process1 process2 =
@@ -263,7 +263,7 @@ prettyTask t = recordDoc
     
 {-| Default `Task`
 
-    Required fields: `taskName` and `resources`
+    Required fields: `process` and `resources`
 
 > _Task = Task
 >     { taskName                = Nothing
@@ -289,7 +289,7 @@ data Job = Job
     { task                   :: Task
     -- ^ The Task object to bind to this job
     , jobName                :: Maybe String
-    -- ^ Job name
+    -- ^ Optional user-supplied job name
     , role                   :: String
     -- ^ Job role account
     , cluster                :: String
