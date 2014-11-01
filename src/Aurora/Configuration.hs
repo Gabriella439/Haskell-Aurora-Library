@@ -56,9 +56,9 @@ module Aurora.Configuration (
     , _HealthCheckConfig
 
     -- * ClientCluster
-    , ClientCluster
+    , ClientCluster(..)
     , _ClientCluster
-    , prettyClientCluster
+    , prettyClientClusters
 
     -- ** Authentication
     , Authentication(..)
@@ -79,6 +79,7 @@ module Aurora.Configuration (
 -- TODO: Check that documentation examples compile
 -- TODO: More type-safe units (i.e. bytes, seconds)
 -- TODO: Pretty-printer should omit fields that match defaults
+-- TODO: Documentation for Client cluster configuration seems inconsistent
 -- TODO: Tighten imports
 
 import Control.Applicative (Applicative(..), Alternative(..), liftA2)
@@ -111,7 +112,7 @@ data Process = Process
 
 -- | Pretty print a `Process`
 prettyProcess :: Process -> Doc
-prettyProcess p = recordDoc'
+prettyProcess p = recordDoc
     "Process"
     [ ("name"        , name'       )
     , ("cmdline"     , cmdline'    )
@@ -168,7 +169,7 @@ prettyConstraint c = recordDoc
     [ ("order", order'')
     ]
   where
-    order'' = list' (map qString (order c))
+    order'' = pure (list' (map qString (order c)))
 
 {-| Use the `order'` function as shorthand to generate Constraint lists. The
     following:
@@ -209,9 +210,9 @@ prettyResource r = recordDoc
     , ("disk", disk')
     ]
   where
-    cpu'  = double (cpu  r)
-    ram'  = word   (ram  r)
-    disk' = word   (disk r)
+    cpu'  = pure (double (cpu  r))
+    ram'  = pure (word   (ram  r))
+    disk' = pure (word   (disk r))
 
 {-| Tasks fundamentally consist of a `taskName` and a `process`.  Processes can
     be further constrained with `taskConstraints`.  In Mesos, `resources` is
@@ -239,7 +240,7 @@ data Task = Task
 
 -- | Pretty print a `Task`
 prettyTask :: Task -> Doc
-prettyTask t = recordDoc'
+prettyTask t = recordDoc
     "Task"
     [ ("name"             , name'            )
     , ("processes"        , processes'       )
@@ -280,7 +281,7 @@ _Task = Task
 
     You can find more extensive documentation at:
 
-    http://aurora.incubator.apache.org/documentation/latest/configuration-reference/
+    <http://aurora.incubator.apache.org/documentation/latest/configuration-reference/>
 -}
 data Job = Job
     { task                   :: Task
@@ -339,7 +340,7 @@ _Job = Job
 
 -- | Pretty print a `Job`
 prettyJob :: Job -> Doc
-prettyJob j = recordDoc'
+prettyJob j = recordDoc
     "Job"
     [ ("task"                 , task'               )
     , ("name"                 , name'               )
@@ -379,9 +380,7 @@ prettyJob j = recordDoc'
     updateConfig'        = fmap prettyUpdateConfig (updateConfig           j)
     constraints'         = fmap f                  (jobConstraints         j)
       where
-        f = dict . map format . Map.assocs
-        dict = encloseSep lbrace rbrace comma
-        format (key, value) = text key <+> colon <+> text value
+        f = jsonDoc . map (\(x, y) -> (x, pure (text y))) . Map.assocs
     service'             = fmap  f                 (jobType                j)
       where
         f x = bool (case x of
@@ -549,18 +548,18 @@ prettyEnvironment e = qString (case e of
 
 -- | Parameters for controlling the rate and policy of rolling updates
 data UpdateConfig = UpdateConfig
-    { batchSize                    :: Word
+    { batchSize                    :: Optional Word
     -- ^ Maximum number of shards to be updated in one iteration
-    , restartThreshold             :: Word
+    , restartThreshold             :: Optional Word
     -- ^ Maximum number of seconds before a shard must move into the `RUNNING`
     --   state before considered a failure 
-    , watchSecs                    :: Word
+    , watchSecs                    :: Optional Word
     -- ^ Minimum number of seconds a shard must remain in `RUNNING` state before
     --   considered a success 
-    , perShardPermissibleFailures  :: Word
+    , perShardPermissibleFailures  :: Optional Word
     -- ^ Maximum number of permissible failures during update. Increments total
     --   failure count when this limit is exceeded
-    , totalPermissibleFailures     :: Word
+    , totalPermissibleFailures     :: Optional Word
     -- ^ Maximum number of shard failures to be tolerated in total during an
     --   update. Cannot be greater than or equal to the total number of tasks
     --   in a job
@@ -569,11 +568,11 @@ data UpdateConfig = UpdateConfig
 -- | Default `UpdateConfig`
 _UpdateConfig :: UpdateConfig
 _UpdateConfig = UpdateConfig
-    { batchSize                   = 1
-    , restartThreshold            = 60
-    , watchSecs                   = 45
-    , perShardPermissibleFailures = 0
-    , totalPermissibleFailures    = 0
+    { batchSize                   = empty
+    , restartThreshold            = empty
+    , watchSecs                   = empty
+    , perShardPermissibleFailures = empty
+    , totalPermissibleFailures    = empty
     }
 
 -- | Pretty print an `UpdateConfig`
@@ -587,32 +586,31 @@ prettyUpdateConfig u = recordDoc
     , ("max_total_failures"    , maxTotalFailures'   )
     ]
   where
-    batchSize'           = word (batchSize                   u)
-    restartThreshold'    = word (restartThreshold            u)
-    watchSecs'           = word (watchSecs                   u)
-    maxPerShardFailures' = word (perShardPermissibleFailures u)
-    maxTotalFailures'    = word (totalPermissibleFailures    u)
+    batchSize'           = fmap word (batchSize                   u)
+    restartThreshold'    = fmap word (restartThreshold            u)
+    watchSecs'           = fmap word (watchSecs                   u)
+    maxPerShardFailures' = fmap word (perShardPermissibleFailures u)
+    maxTotalFailures'    = fmap word (totalPermissibleFailures    u)
 
 -- | Parameters for controlling a task’s health checks via HTTP.
 data HealthCheckConfig = HealthCheckConfig
-    { initialIntervalSecs            :: Word
+    { initialIntervalSecs            :: Optional Word
     -- ^ Initial delay for performing an HTTP health check
-    , intervalSecs                   :: Word
+    , intervalSecs                   :: Optional Word
     -- ^ Interval on which to check the task’s health via HTTP
-    , timeoutSecs                    :: Word
+    , timeoutSecs                    :: Optional Word
     -- ^ HTTP request timeout
-    , consecutivePermissibleFailures :: Word
+    , consecutivePermissibleFailures :: Optional Word
     -- ^ Consecutive failures tolerated before considering a task unhealthy
     } deriving (Eq, Show)
 
-{-| Default `HealthCheckConfig`
--}
+-- | Default `HealthCheckConfig`
 _HealthCheckConfig :: HealthCheckConfig
 _HealthCheckConfig = HealthCheckConfig
-    { initialIntervalSecs            = 15
-    , intervalSecs                   = 10
-    , timeoutSecs                    = 1
-    , consecutivePermissibleFailures = 0
+    { initialIntervalSecs            = empty
+    , intervalSecs                   = empty
+    , timeoutSecs                    = empty
+    , consecutivePermissibleFailures = empty
     }
 
 -- | Pretty print a `HealthCheckConfig`
@@ -625,10 +623,10 @@ prettyHealthCheckConfig h = recordDoc
     , ("max_consecutive_failures", maxConsecutiveFailures')
     ]
   where
-    initialIntervalSecs'    = word (initialIntervalSecs            h)
-    intervalSecs'           = word (intervalSecs                   h)
-    timeoutSecs'            = word (timeoutSecs                    h)
-    maxConsecutiveFailures' = word (consecutivePermissibleFailures h)
+    initialIntervalSecs'    = fmap word (initialIntervalSecs            h)
+    intervalSecs'           = fmap word (intervalSecs                   h)
+    timeoutSecs'            = fmap word (timeoutSecs                    h)
+    maxConsecutiveFailures' = fmap word (consecutivePermissibleFailures h)
 
 {-| A cluster configuration file is used by the Aurora client to describe the
     Aurora clusters with which it can communicate.  Ultimately this allows
@@ -636,7 +634,7 @@ prettyHealthCheckConfig h = recordDoc
 
     You can find more extensive documentation at:
 
-    http://aurora.incubator.apache.org/documentation/latest/client-cluster-configuration/
+    <http://aurora.incubator.apache.org/documentation/latest/client-cluster-configuration/>
 -}
 data ClientCluster = ClientCluster
     { clusterName       :: String
@@ -658,7 +656,7 @@ data ClientCluster = ClientCluster
     , authMechanism     :: Optional Authentication
     -- ^ The authentication mechanism to use when communicating with the
     --   scheduler
-    }
+    } deriving (Eq, Show)
 
 {-| Default `ClientCluster`
 
@@ -674,12 +672,40 @@ _ClientCluster = ClientCluster
     , authMechanism   = empty
     }
 
--- | Pretty print a `ClientCluster`
+-- | Pretty print a `ClientCluster` as JSON
 prettyClientCluster :: ClientCluster -> Doc
-prettyClientCluster = undefined
+prettyClientCluster c = jsonDoc
+    [ ("name"               , name'             )
+    , ("slave_root"         , slaveRoot'        )
+    , ("slave_run_directory", slaveRunDirectory')
+    , ("zk"                 , zk'               )
+    , ("zk_port"            , zkPort'           )
+    , ("scheduler_zk_path"  , schedulerZkPath'  )
+    , ("scheduler_uri"      , schedulerUri'     )
+    , ("proxy_url"          , proxyUrl'         )
+    , ("auth_mechanism"     , authMechanism'    )
+    ]
+  where
+    name'              = pure (qString              (clusterName       c))
+    slaveRoot'         = pure (qString              (slaveRoot         c))
+    slaveRunDirectory' = pure (qString              (slaveRunDirectory c))
+    zk'                = fmap  qString              (zk                c)
+    zkPort'            = fmap  word16               (zkPort            c)
+    schedulerZkPath'   = fmap  qString              (schedulerZkPath   c)
+    schedulerUri'      = fmap  qString              (schedulerUri      c)
+    proxyUrl'          = fmap  qString              (proxyUrl          c)
+    authMechanism'     = fmap  prettyAuthentication (authMechanism     c)
+
+-- | Pretty print a list of `ClientCluster`s as JSON
+prettyClientClusters :: [ClientCluster] -> Doc
+prettyClientClusters cs = list' (map prettyClientCluster cs)
 
 -- | Authentication mechanism
-data Authentication = Unauthenticated
+data Authentication = Unauthenticated deriving (Eq, Show)
+
+prettyAuthentication :: Authentication -> Doc
+prettyAuthentication a = case a of
+    Unauthenticated -> text "UNAUTHENTICATED"
     
 -- | A potentially infinite value
 data Maximum a = Infinite | Finite a deriving (Eq, Show)
@@ -778,25 +804,28 @@ instance Num a => Num (Optional a) where
 instance IsString a => IsString (Optional a) where
     fromString str = pure (fromString str)
 
-recordDoc :: String -> [(String, Doc)] -> Doc
-recordDoc recordName pairs =
-    text recordName <> tupled' (map format pairs)
-  where
-    format (fieldName, value) = text fieldName <+> equals <+> value
-
-recordDoc' :: String -> [(String, Optional Doc)] -> Doc
-recordDoc' recordName pairs =
-    text recordName <> tupled' (concatMap format pairs)
+recordDoc :: String -> [(String, Optional Doc)] -> Doc
+recordDoc recordName pairs = text recordName <> tupled' (concatMap format pairs)
   where
     format (fieldName, mValue) = case mValue of
         Default        -> []
         Specific value -> [text fieldName <+> equals <+> value]
+
+jsonDoc :: [(String, Optional Doc)] -> Doc
+jsonDoc pairs = braced (concatMap format pairs)
+  where
+    format (fieldName, mValue) = case mValue of
+        Default        -> []
+        Specific value -> [qString fieldName <> colon <+> value]
 
 shown :: Show a => a -> Doc
 shown = text . show
 
 word :: Word -> Doc
 word = shown
+
+word16 :: Word16 -> Doc
+word16 = shown
 
 qString :: String -> Doc
 qString = dquotes . text
@@ -806,3 +835,6 @@ list' ds = list (map (space <>) ds)
 
 tupled' :: [Doc] -> Doc
 tupled' ds = tupled (map (space <>) ds)
+
+braced :: [Doc] -> Doc
+braced ds = encloseSep lbrace rbrace comma (map (space <>) ds)
