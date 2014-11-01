@@ -55,11 +55,20 @@ module Aurora.Configuration (
     , HealthCheckConfig(..)
     , _HealthCheckConfig
 
-    -- * Maximum
+    -- * ClientCluster
+    , ClientCluster
+    , _ClientCluster
+    , prettyClientCluster
+
+    -- ** Authentication
+    , Authentication(..)
+
+    -- * Miscellaneous
     , Maximum(..)
+    , Optional(..)
 
     -- * Re-exports
-    , Word
+    , module Data.Word
     ) where
 
 -- TODO: Create lenses and traversals for all types
@@ -72,12 +81,15 @@ module Aurora.Configuration (
 -- TODO: Pretty-printer should omit fields that match defaults
 -- TODO: Tighten imports
 
-import Control.Applicative (Applicative(pure, (<*>)), liftA2, (<|>))
+import Control.Applicative (Applicative(..), Alternative(..), liftA2)
+import Control.Monad (MonadPlus(..))
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Word (Word, Word8)
-import Text.PrettyPrint.Leijen
+import Data.String(IsString(..))
+import Data.Monoid (Monoid(..))
+import Data.Word (Word, Word8, Word16)
+import Text.PrettyPrint.Leijen hiding (empty)
 
 -- | Options for a Thermos process
 data Process = Process
@@ -85,21 +97,21 @@ data Process = Process
     -- ^ Process name
     , cmdline                    :: String
     -- ^ Command line
-    , processPermissibleFailures :: Maximum Word
+    , processPermissibleFailures :: Optional (Maximum Word)
     -- ^ Maximum permissible process run failures
-    , daemon                     :: Bool
+    , daemon                     :: Optional Bool
     -- ^ When `True`, this is a daemon process
-    , ephemeral                  :: Bool
+    , ephemeral                  :: Optional Bool
     -- ^ When `True`, this is an ephemeral process
-    , minDuration                :: Word
+    , minDuration                :: Optional Word
     -- ^ Minimum duration between process restarts in seconds
-    , final                      :: Bool
+    , final                      :: Optional Bool
     -- ^ When `True`, this process is a finalizing one that should run last
     } deriving (Eq, Show)
 
 -- | Pretty print a `Process`
 prettyProcess :: Process -> Doc
-prettyProcess p = recordDoc
+prettyProcess p = recordDoc'
     "Process"
     [ ("name"        , name'       )
     , ("cmdline"     , cmdline'    )
@@ -110,35 +122,29 @@ prettyProcess p = recordDoc
     , ("final"       , final'      )
     ]
   where
-    name'        = qString (processName p)
-    cmdline'     = qString (cmdline     p)
-    maxFailures' = word (case processPermissibleFailures p of
-        Unlimited -> 0
-        Finite n  -> n + 1 )
-    daemon'      = bool    (daemon      p)
-    ephemeral'   = bool    (daemon      p)
-    minDuration' = word    (minDuration p)
-    final'       = bool    (final       p)
+    name'        = pure (qString (processName p))
+    cmdline'     = pure (qString (cmdline     p))
+    maxFailures' = do
+        m <- processPermissibleFailures p
+        return (word (case m of
+            Infinite -> 0
+            Finite n -> n + 1 ))
+    daemon'      = fmap bool (daemon      p)
+    ephemeral'   = fmap bool (daemon      p)
+    minDuration' = fmap word (minDuration p)
+    final'       = fmap bool (final       p)
 
-{-| Default `Process`
+{-| Optional `Process`
 
     Required fields: `processName` and `cmdline`
-
-> _Process = Process
->     { processPermissibleFailures = 0
->     , daemon                     = False
->     , ephemeral                  = False
->     , minDuration                = 15
->     , final                      = False
->     }
 -}
 _Process :: Process
 _Process = Process
-    { processPermissibleFailures = 0
-    , daemon                     = False
-    , ephemeral                  = False
-    , minDuration                = 15
-    , final                      = False
+    { processPermissibleFailures = empty
+    , daemon                     = empty
+    , ephemeral                  = empty
+    , minDuration                = empty
+    , final                      = empty
     }
 
 {-| Current constraint objects only support a single ordering constraint,
@@ -151,10 +157,7 @@ data Constraint = Constraint
     -- ^ List of processes by name that should be run serially
     } deriving (Eq, Show)
 
-{-| Default `Constraint`
-
-> _Constraint = Constraint { order = [] }
--}
+-- | Ordering `Constraint`s
 _Constraint :: Constraint
 _Constraint = Constraint { order = [] }
 
@@ -190,11 +193,9 @@ data Resource = Resource
     -- ^ Bytes of disk required by the task
     } deriving (Eq, Show)
 
-{-| Default `Resource`
+{-| Optional `Resource`
 
     Required fields: `cpu`, `ram`, and `disk`
-
-> _Resource = Resource {}
 -}
 _Resource :: Resource
 _Resource = Resource {}
@@ -218,27 +219,27 @@ prettyResource r = recordDoc
 
 -}
 data Task = Task
-    { taskName                :: Maybe String
+    { taskName                :: Optional String
     -- ^ Optional user-supplied task name
     , process                 :: Process
     -- ^ First `Process` bound to this task
     , processes               :: [Process]
     -- ^ Remaining `Process`es bound to this task
-    , taskConstraints         :: [Constraint]
+    , taskConstraints         :: Optional [Constraint]
     -- ^ List of `Constraint`s constraining processes
     , resources               :: Resource
     -- ^ Resource footprint
-    , taskPermissibleFailures :: Word
+    , taskPermissibleFailures :: Optional Word
     -- ^ Maximum permissible process failures
-    , maxConcurrency          :: Maximum Word
+    , maxConcurrency          :: Optional (Maximum Word)
     -- ^ Maximum number of concurrent processes
-    , finalizationWait        :: Word
+    , finalizationWait        :: Optional Word
     -- ^ Amount of time allocated for finalizing processes, in seconds
     } deriving (Eq, Show)
 
 -- | Pretty print a `Task`
 prettyTask :: Task -> Doc
-prettyTask t = recordDoc
+prettyTask t = recordDoc'
     "Task"
     [ ("name"             , name'            )
     , ("processes"        , processes'       )
@@ -249,75 +250,71 @@ prettyTask t = recordDoc
     , ("finalization_wait", finalizationWait')
     ]
   where
-    name'             = string (case taskName t of
-        Nothing  -> processName (process t)
-        Just str -> str )
-    processes'        = list' (map prettyProcess (process t : processes t))
-    constraints'      = list' (map prettyConstraint (taskConstraints t))
-    resources'        = prettyResource (resources t)
-    maxFailures'      = word (taskPermissibleFailures t)
-    maxConcurrency'   = word (case maxConcurrency t of
-        Unlimited -> 0
-        Finite n  -> n + 1 )
-    finalizationWait' = word (finalizationWait t)
+    name'             = fmap qString (taskName t)
+    processes'        = pure (list' (map prettyProcess (process t:processes t)))
+    constraints'      = fmap (list' . map prettyConstraint) (taskConstraints t)
+    resources'        = pure (prettyResource (resources t))
+    maxFailures'      = fmap word (taskPermissibleFailures t)
+    maxConcurrency'   = fmap (word . f) (maxConcurrency t)
+      where
+        f x = case x of
+            Infinite -> 0
+            Finite n -> n + 1
+    finalizationWait' = fmap word (finalizationWait t)
     
 {-| Default `Task`
 
     Required fields: `process` and `resources`
-
-> _Task = Task
->     { taskName                = Nothing
->     , processes               = []
->     , taskConstraints         = []
->     , taskPermissibleFailures = 0
->     , maxConcurrency          = Unlimited
->     , finalizationWait        = 30
->     }
 -}
 _Task :: Task
 _Task = Task
-    { taskName                = Nothing
+    { taskName                = empty
     , processes               = []
-    , taskConstraints         = []
-    , taskPermissibleFailures = 0
-    , maxConcurrency          = Unlimited
-    , finalizationWait        = 30
+    , taskConstraints         = empty
+    , taskPermissibleFailures = empty
+    , maxConcurrency          = empty
+    , finalizationWait        = empty
     }
 
--- | Options for an aurora job
+{-| Options for an aurora job
+
+    You can find more extensive documentation at:
+
+    http://aurora.incubator.apache.org/documentation/latest/configuration-reference/
+-}
 data Job = Job
     { task                   :: Task
     -- ^ The Task object to bind to this job
-    , jobName                :: Maybe String
+    , jobName                :: Optional String
     -- ^ Optional user-supplied job name
     , role                   :: String
     -- ^ Job role account
     , cluster                :: String
     -- ^ Cluster in which this job is scheduled
-    , environment            :: Environment
+    , environment            :: Optional Environment
     -- ^ Job environment
-    , contact                :: String
+    , contact                :: Optional String
     -- ^ Best email address to reach the owner of the job.  For production jobs,
     --   this is usually a team mailing list
-    , instances              :: Word
+    , instances              :: Optional Word
     -- ^ Number of instances (sometimes referred to as replicas or shards) of
     --   the task to create
-    , updateConfig           :: UpdateConfig
+    , updateConfig           :: Optional UpdateConfig
     -- ^ Parameters for controlling the rate and policy of rolling updates
-    , jobConstraints         :: Map String String
+    , jobConstraints         :: Optional (Map String String)
     -- ^ Scheduling constraints for the tasks
-    , jobType                :: JobType
+    , jobType                :: Optional JobType
     -- ^ Specify whether the job is a service or cron job
-    , jobPermissibleFailures :: Maximum Word
+    , jobPermissibleFailures :: Optional (Maximum Word)
     -- ^ Maximum permissible task failures
-    , priority               :: Integer
+    , priority               :: Optional Integer
     -- ^ Preemption priority to give the task.  Tasks with higher priorities may
     --   preempt tasks at lower priorities
-    , production             :: Bool
+    , production             :: Optional Bool
     -- ^ Whether or not this is a production task backed by quota.  Production
     --   jobs may preempt any non-production job, and may only be preempted by
     --   production jobs in the same role 
-    , healthCheckConfig      :: HealthCheckConfig
+    , healthCheckConfig      :: Optional HealthCheckConfig
     -- ^ Parameters for controlling a task’s health checks via HTTP. Only used
     --   if a health port was assigned with a command line wildcard
     } deriving (Eq, Show)
@@ -325,37 +322,24 @@ data Job = Job
 {-| Default `Job`
 
     Required fields: `task`, `role`, `cluster`, and `contact`
-
-> _Job = Job
->     { jobName                = Nothing
->     , environment            = Devel
->     , instances              = 1
->     , updateConfig           = _UpdateConfig
->     , jobConstraints         = Map.empty
->     , jobType                = Ordinary
->     , jobPermissibleFailures = 0
->     , priority               = 0 
->     , production             = False
->     , healthCheckConfig      = _HealthCheckConfig
->     }
 -}
 _Job :: Job
 _Job = Job
-    { jobName                = Nothing
-    , environment            = Devel
-    , instances              = 1
-    , updateConfig           = _UpdateConfig
-    , jobConstraints         = Map.empty
-    , jobType                = Ordinary
-    , jobPermissibleFailures = 0
-    , priority               = 0 
-    , production             = False
-    , healthCheckConfig      = _HealthCheckConfig
+    { jobName                = empty
+    , environment            = empty
+    , instances              = empty
+    , updateConfig           = empty
+    , jobConstraints         = empty
+    , jobType                = empty
+    , jobPermissibleFailures = empty
+    , priority               = empty
+    , production             = empty
+    , healthCheckConfig      = empty
     }
 
 -- | Pretty print a `Job`
 prettyJob :: Job -> Doc
-prettyJob j = recordDoc
+prettyJob j = recordDoc'
     "Job"
     [ ("task"                 , task'               )
     , ("name"                 , name'               )
@@ -375,35 +359,42 @@ prettyJob j = recordDoc
     , ("health_check_config"  , healthCheckConfig'  )
     ]
   where
-    task'                = prettyTask              (task              j)
-    name'                = qString (case jobName j <|> taskName (task j) of
-        Nothing  -> processName (process (task j))
-        Just str -> str )
-    role'                = qString                 (role              j)
-    cluster'             = qString                 (cluster           j)
-    environment'         = prettyEnvironment       (environment       j)
-    contact'             = qString                 (contact           j)
-    instances'           = word                    (instances         j)
-    cronSchedule'        = case jobType j of
-        Cron s _ -> prettySchedule s
-        _        -> text "None"
-    cronCollisionPolicy' = prettyCollisionPolicy (case jobType j of
-        Cron _ c -> c
-        _        -> KillExisting )
-    updateConfig'        = prettyUpdateConfig (updateConfig j)
-    constraints'         = dict (map format (Map.assocs (jobConstraints j)))
+    task'                = pure (prettyTask        (task                   j))
+    name'                = fmap  qString           (jobName                j)
+    role'                = pure (qString           (role                   j))
+    cluster'             = pure (qString           (cluster                j))
+    environment'         = fmap  prettyEnvironment (environment            j)
+    contact'             = fmap  qString           (contact                j)
+    instances'           = fmap  word              (instances              j)
+    cronSchedule'        = fmap  f                 (jobType                j)
       where
+        f x = case x of
+            Cron s _ -> prettySchedule s
+            _        -> text "None"
+    cronCollisionPolicy' = fmap  f                 (jobType                j)
+      where
+        f x = prettyCollisionPolicy (case x of
+            Cron _ c -> c
+            _        -> KillExisting )
+    updateConfig'        = fmap prettyUpdateConfig (updateConfig           j)
+    constraints'         = fmap f                  (jobConstraints         j)
+      where
+        f = dict . map format . Map.assocs
         dict = encloseSep lbrace rbrace comma
         format (key, value) = text key <+> colon <+> text value
-    service'             = bool (case jobType j of
-        Service -> True
-        _       -> False )
-    maxTaskFailures'     = int (case jobPermissibleFailures j of
-        Unlimited -> -1
-        Finite n  -> fromIntegral n + 1 )
-    priority'            = integer                 (priority          j)
-    production'          = bool                    (production        j)
-    healthCheckConfig'   = prettyHealthCheckConfig (healthCheckConfig j)
+    service'             = fmap  f                 (jobType                j)
+      where
+        f x = bool (case x of
+            Service -> True
+            _       -> False )
+    maxTaskFailures'     = fmap  f                 (jobPermissibleFailures j)
+      where
+        f x = int (case x of
+            Infinite -> -1
+            Finite n -> fromIntegral n + 1 )
+    priority'            = fmap  integer                 (priority          j)
+    production'          = fmap  bool                    (production        j)
+    healthCheckConfig'   = fmap  prettyHealthCheckConfig (healthCheckConfig j)
 
 {-| Specify whether the job is a service or cron job
 
@@ -575,17 +566,7 @@ data UpdateConfig = UpdateConfig
     --   in a job
     } deriving (Eq, Show)
 
-{-| Default `UpdateConfig`
-
-> _UpdateConfig :: UpdateConfig
-> _UpdateConfig = UpdateConfig
->     { batchSize                   = 1
->     , restartThreshold            = 60
->     , watchSecs                   = 45
->     , perShardPermissibleFailures = 0
->     , totalPermissibleFailures    = 0
->     }
--}
+-- | Default `UpdateConfig`
 _UpdateConfig :: UpdateConfig
 _UpdateConfig = UpdateConfig
     { batchSize                   = 1
@@ -649,48 +630,167 @@ prettyHealthCheckConfig h = recordDoc
     timeoutSecs'            = word (timeoutSecs                    h)
     maxConsecutiveFailures' = word (consecutivePermissibleFailures h)
 
-{-| A potentially unlimited value
+{-| A cluster configuration file is used by the Aurora client to describe the
+    Aurora clusters with which it can communicate.  Ultimately this allows
+    client users to reference clusters with short names like @us-east@ and @eu@
 
-    Note that `Maximum` implements `Num`, so you can use naked numeric literals
-    anywhere something expects a `Maximum` and the compiler will automatically
-    wrap the numeric literal in `Finite`
+    You can find more extensive documentation at:
+
+    http://aurora.incubator.apache.org/documentation/latest/client-cluster-configuration/
 -}
-data Maximum a = Unlimited | Finite a deriving (Eq, Show)
+data ClientCluster = ClientCluster
+    { clusterName       :: String
+    -- ^ Cluster name
+    , slaveRoot         :: String
+    -- ^ Path to mesos slave work dir
+    , slaveRunDirectory :: String
+    -- ^ Name of mesos slave run dir
+    , zk                :: Optional String
+    -- ^ Hostname of ZooKeeper instance used to resolve Aurora schedulers
+    , zkPort            :: Optional Word16
+    -- ^ Port of ZooKeeper instance used to locate Aurora schedulers
+    , schedulerZkPath   :: Optional String
+    -- ^ ZooKeeper path under which scheduler instances are registered
+    , schedulerUri      :: Optional String
+    -- ^ URI of Aurora scheduler instance
+    , proxyUrl          :: Optional String
+    -- ^ Used by the client to format URLs for display
+    , authMechanism     :: Optional Authentication
+    -- ^ The authentication mechanism to use when communicating with the
+    --   scheduler
+    }
+
+{-| Default `ClientCluster`
+
+    Required fields: `name`, `slaveRoot`, and `slaveRunDirectory`
+-}
+_ClientCluster :: ClientCluster
+_ClientCluster = ClientCluster
+    { zk              = empty
+    , zkPort          = empty
+    , schedulerZkPath = empty
+    , schedulerUri    = empty
+    , proxyUrl        = empty
+    , authMechanism   = empty
+    }
+
+-- | Pretty print a `ClientCluster`
+prettyClientCluster :: ClientCluster -> Doc
+prettyClientCluster = undefined
+
+-- | Authentication mechanism
+data Authentication = Unauthenticated
+    
+-- | A potentially infinite value
+data Maximum a = Infinite | Finite a deriving (Eq, Show)
 
 instance Functor Maximum where
-    fmap _  Unlimited  = Unlimited
+    fmap _  Infinite   = Infinite
     fmap f (Finite a ) = Finite (f a)
 
 instance Applicative Maximum where
     pure = Finite
 
     Finite f <*> Finite x = Finite (f x)
-    _        <*> _        = Unlimited
+    _        <*> _        = Infinite
 
 instance Monad Maximum where
     return = Finite
 
-    Unlimited >>= _ = Unlimited
-    Finite x  >>= f = f x
+    Infinite >>= _ = Infinite
+    Finite x >>= f = f x
+
+instance Alternative Maximum where
+    empty = Infinite
+
+    Infinite <|> x = x
+    x        <|> _ = x
+
+instance MonadPlus Maximum where
+    mzero = empty
+    mplus = (<|>)
+
+instance Monoid a => Monoid (Maximum a) where
+    mempty = pure mempty
+
+    mappend = liftA2 mappend
 
 instance Num a => Num (Maximum a) where
-    fromInteger a = Finite (fromInteger a)
+    fromInteger n = pure (fromInteger n)
 
     (+) = liftA2 (+)
-
     (*) = liftA2 (*)
+    (-) = liftA2 (-)
 
     negate = fmap negate
-
+    abs    = fmap abs
     signum = fmap signum
 
+instance IsString a => IsString (Maximum a) where
+    fromString str = pure (fromString str)
+
+-- | A type that will `Default` to a particular value if left unspecified
+data Optional a = Default | Specific a deriving (Eq, Show)
+
+instance Functor Optional where
+    fmap f x = case x of
+        Default    -> Default
+        Specific y -> Specific (f y)
+
+instance Applicative Optional where
+    pure = Specific
+
+    Specific f <*> Specific x = Specific (f x)
+    _          <*> _          = Default
+
+instance Monad Optional where
+    return = Specific
+
+    Default    >>= _ = Default
+    Specific x >>= f = f x
+
+instance Alternative Optional where
+    empty = Default
+
+    Default <|> x = x
+    x       <|> _ = x
+
+instance MonadPlus Optional where
+    mzero = empty
+    mplus = (<|>)
+
+instance Monoid a => Monoid (Optional a) where
+    mempty = pure mempty
+
+    mappend = liftA2 mappend
+
+instance Num a => Num (Optional a) where
+    fromInteger n = pure (fromInteger n)
+
+    (+) = liftA2 (+)
+    (*) = liftA2 (*)
+    (-) = liftA2 (-)
+
+    negate = fmap negate
     abs    = fmap abs
+    signum = fmap signum
+
+instance IsString a => IsString (Optional a) where
+    fromString str = pure (fromString str)
 
 recordDoc :: String -> [(String, Doc)] -> Doc
 recordDoc recordName pairs =
-        text recordName <> tupled' (map format pairs)
+    text recordName <> tupled' (map format pairs)
   where
     format (fieldName, value) = text fieldName <+> equals <+> value
+
+recordDoc' :: String -> [(String, Optional Doc)] -> Doc
+recordDoc' recordName pairs =
+    text recordName <> tupled' (concatMap format pairs)
+  where
+    format (fieldName, mValue) = case mValue of
+        Default        -> []
+        Specific value -> [text fieldName <+> equals <+> value]
 
 shown :: Show a => a -> Doc
 shown = text . show
