@@ -288,11 +288,11 @@ data Job = Job
     -- ^ The Task object to bind to this job
     , jobName                :: Optional String
     -- ^ Optional user-supplied job name
-    , role                   :: String
+    , jobRole                :: String
     -- ^ Job role account
-    , cluster                :: String
+    , jobCluster             :: String
     -- ^ Cluster in which this job is scheduled
-    , environment            :: Optional Environment
+    , jobEnvironment         :: Optional Environment
     -- ^ Job environment
     , contact                :: Optional String
     -- ^ Best email address to reach the owner of the job.  For production jobs,
@@ -322,12 +322,12 @@ data Job = Job
 
 {-| Default `Job`
 
-    Required fields: `task`, `role`, `cluster`, and `contact`
+    Required fields: `task`, `jobRole`, `jobCluster`, and `contact`
 -}
 _Job :: Job
 _Job = Job
     { jobName                = empty
-    , environment            = empty
+    , jobEnvironment         = empty
     , instances              = empty
     , updateConfig           = empty
     , jobConstraints         = empty
@@ -362,9 +362,9 @@ prettyJob j = recordDoc
   where
     task'                = pure (prettyTask        (task                   j))
     name'                = fmap  qString           (jobName                j)
-    role'                = pure (qString           (role                   j))
-    cluster'             = pure (qString           (cluster                j))
-    environment'         = fmap  prettyEnvironment (environment            j)
+    role'                = pure (qString           (jobRole                j))
+    cluster'             = pure (qString           (jobCluster             j))
+    environment'         = fmap  prettyEnvironment (jobEnvironment         j)
     contact'             = fmap  qString           (contact                j)
     instances'           = fmap  word              (instances              j)
     cronSchedule'        = fmap  f                 (jobType                j)
@@ -660,7 +660,7 @@ data ClientCluster = ClientCluster
 
 {-| Default `ClientCluster`
 
-    Required fields: `name`, `slaveRoot`, and `slaveRunDirectory`
+    Required fields: `clusterName`, `slaveRoot`, and `slaveRunDirectory`
 -}
 _ClientCluster :: ClientCluster
 _ClientCluster = ClientCluster
