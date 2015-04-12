@@ -57,6 +57,11 @@
 --   you see `Optional` `Integer` or `Optional` `Double`
 -- * Any `Optional` field that you leave `empty` will not be rendered in the final
 --   Aurora config, using whatever Aurora defaults to for that field
+--
+-- To learn more about what all the types and fields mean, read the Aurora
+-- configuration reference here:
+--
+-- <http://aurora.incubator.apache.org/documentation/latest/configuration-reference/>
 
 module Aurora.Config (
     -- * Render
