@@ -14,6 +14,7 @@ import Aurora.Process (Process)
 import Aurora.Pretty (recordDoc, list', text)
 import Aurora.Resources (Resources)
 
+-- | Visit the "Aurora.Task" module for properly formatted documentation for `Task`
 data Task = Task
     { name              :: Optional Text
     , processes         :: [Process]

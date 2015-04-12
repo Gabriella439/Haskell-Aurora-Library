@@ -16,6 +16,7 @@ import Aurora.Pretty (recordDoc, label, list', text)
 import Aurora.Task (Task)
 import Aurora.UpdateConfig (UpdateConfig)
 
+-- | Visit the "Aurora.Job" module for properly formatted documentation for `Job`
 data Job = Job
     { task                  :: Task
     , name                  :: Optional Text
