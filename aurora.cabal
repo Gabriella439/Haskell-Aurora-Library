@@ -4,7 +4,7 @@ Cabal-Version: >=1.8.0.2
 Build-Type: Simple
 License: BSD3
 License-File: LICENSE
-Copyright: 2014 Gabriel Gonzalez
+Copyright: 2015 Gabriel Gonzalez
 Author: Gabriel Gonzalez
 Maintainer: Gabriel439@gmail.com
 Bug-Reports: https://github.com/Gabriel439/Haskell-Aurora-Library/issues
@@ -13,13 +13,7 @@ Description: Apache Aurora is a service scheduler that runs on top of Mesos,
     enabling you to run long-running services that take advantage of Mesos'
     scalability, fault-tolerance, and resource isolation.
     .
-    This library provides a Haskell API for Aurora with the main goals of:
-    .
-    * /Native configuration/: configure Aurora within Haskell
-    .
-    * /Static type safety/: check the aurora configuration at compile time
-    .
-    * /Stronger typing/: prevent some classes of configuration errors
+    This library provides a Haskell API for Aurora
 Category: System
 Source-Repository head
     Type: git
@@ -28,9 +22,21 @@ Source-Repository head
 Library
     Hs-Source-Dirs: src
     Build-Depends:
-        base       >= 4       && < 5  ,
-        wl-pprint                < 1.2,
-        containers               < 0.6
+        base      >= 4 && < 5  ,
+        wl-pprint         < 1.2,
+        text
     Exposed-Modules:
-        Aurora.Configuration
+        Aurora.Config,
+        Aurora.Constants,
+        Aurora.Constraint,
+        Aurora.Container,
+        Aurora.Docker,
+        Aurora.HealthCheckConfig,
+        Aurora.Job,
+        Aurora.Optional,
+        Aurora.Pretty,
+        Aurora.Process,
+        Aurora.Resources,
+        Aurora.Task,
+        Aurora.UpdateConfig
     GHC-Options: -Wall
