@@ -22,8 +22,8 @@ data Job = Job
     , name                  :: Optional Text
     , role                  :: Text
     , cluster               :: Text
-    , environment           :: Optional Text
-    , contact               :: Text
+    , environment           :: Text
+    , contact               :: Optional Text
     , instances             :: Optional Integer
     , cron_schedule         :: Optional Text
     , cron_collision_policy :: Optional Text
@@ -39,12 +39,12 @@ data Job = Job
 
 {-| Default `Job`
 
-    Required fields: `task`, `role`, `cluster`, and `contact`
+    Required fields: `task`, `role`, `cluster` and `environment`
 -}
 _Job :: Job
 _Job = Job
     { name                   = empty
-    , environment            = empty
+    , contact                = empty
     , instances              = empty
     , cron_schedule          = empty
     , cron_collision_policy  = empty
@@ -64,8 +64,8 @@ instance Pretty Job where
         , ("name"                 , fmap text          name                  )
         , ("role"                 , fmap text    (pure role                 ))
         , ("cluster"              , fmap text    (pure cluster              ))
-        , ("environment"          , fmap text          environment           )
-        , ("contact"              , fmap text    (pure contact              ))
+        , ("environment"          , fmap text    (pure environment          ))
+        , ("contact"              , fmap text          contact               )
         , ("instances"            , fmap integer       instances             )
         , ("cron_schedule"        , fmap text          cron_schedule         )
         , ("cron_collision_policy", fmap text          cron_collision_policy )
@@ -86,6 +86,6 @@ constraint keyVals = encloseSep lbrace rbrace comma (map (space <>) keyVals')
         (key, val) <- keyVals
         return (text key <> colon <+> text val)
 
--- | Render anything that implements `Pretty` as `Text`
+-- | Render a list of Aurora jobs
 renderJobs :: [Job] -> Text
 renderJobs jobs = pack (show (label "jobs" <+> equals <+> list' pretty jobs))

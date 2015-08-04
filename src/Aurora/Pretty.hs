@@ -6,14 +6,14 @@ import Text.PrettyPrint.Leijen hiding (text)
 import Aurora.Optional (Optional(..))
 
 recordDoc :: Text -> [(Text, Optional Doc)] -> Doc
-recordDoc recordName pairs = label recordName <> tupled' (concatMap format pairs)
+recordDoc recordName pairs =
+    label recordName <> tupled' (concatMap format pairs)
   where
     format (fieldName, mValue) = case mValue of
         Default        -> []
         Specific value -> [label fieldName <+> equals <+> value]
 
-tupled' :: [Doc] -> Doc
-tupled' ds = tupled (map (space <>) ds)
+    tupled' ds = tupled (map (space <>) ds)
 
 label :: Text -> Doc
 label txt = string (unpack txt)

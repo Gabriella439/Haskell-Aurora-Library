@@ -31,9 +31,9 @@
 -- >             , disk = 1 * gb
 -- >             }
 -- >         }
--- >     , role    = "example-role"
--- >     , cluster = "example-cluster"
--- >     , contact = "example@example.com"
+-- >     , role        = "example-role"
+-- >     , cluster     = "example-cluster"
+-- >     , environment = "devel"
 -- >     }
 --
 -- You can then render the above `Job` to a valid Aurora configuration file using
@@ -47,7 +47,7 @@
 --                                                 , disk = 1073741824))
 --             , role = "example-role"
 --             , cluster = "example-cluster"
---             , contact = "example@example.com")]
+--             , environment = "devel")]
 --
 -- Some things to note:
 --
